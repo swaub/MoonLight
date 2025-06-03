@@ -1,0 +1,437 @@
+﻿<Window x:Class="MoonLight.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MoonLight"
+        xmlns:vm="clr-namespace:MoonLight.ViewModels"
+        xmlns:models="clr-namespace:MoonLight.Models"
+        xmlns:converters="clr-namespace:MoonLight.Converters"
+        mc:Ignorable="d"
+        Title="MoonLight Silent Installer" 
+        Height="800" Width="1200"
+        MinHeight="600" MinWidth="900"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
+        Icon="pack://application:,,,/Logo/moonlight.ico">
+    
+    <Window.Resources>
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+        <converters:LogLevelConverter x:Key="LogLevelConverter"/>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="80"/>    <!-- Header -->
+            <RowDefinition Height="60"/>    <!-- Mode Selection -->
+            <RowDefinition Height="50"/>    <!-- Search Bar -->
+            <RowDefinition Height="*"/>     <!-- Main Content -->
+            <RowDefinition Height="80"/>    <!-- Action Buttons -->
+            <RowDefinition Height="150"/>   <!-- Log Output -->
+            <RowDefinition Height="30"/>    <!-- Status Bar -->
+        </Grid.RowDefinitions>
+        
+        <!-- Header Section -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderGradientBrush}">
+            <Grid>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Margin="30,0">
+                    <TextBlock Text="MoonLight Silent Installer" 
+                               FontSize="24" FontWeight="SemiBold" 
+                               Foreground="White"/>
+                    <TextBlock Text="Automate software installations silently and efficiently" 
+                               FontSize="14" 
+                               Foreground="White" Opacity="0.9"/>
+                </StackPanel>
+                <TextBlock Text="Version 1.0.0" 
+                           VerticalAlignment="Center" HorizontalAlignment="Right" 
+                           Margin="30,0" Foreground="White" Opacity="0.7"/>
+            </Grid>
+        </Border>
+        
+        <!-- Mode Selection -->
+        <Border Grid.Row="1" Background="{StaticResource LightGrayBrush}" 
+                BorderBrush="{StaticResource MediumGrayBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <RadioButton x:Name="BatchModeRadio" Content="Batch Installation Mode" 
+                             IsChecked="{Binding IsBatchMode, Mode=TwoWay}" 
+                             Style="{StaticResource ModernRadioButtonStyle}"
+                             GroupName="Mode"/>
+                <RadioButton x:Name="SingleModeRadio" Content="Single Installation Mode" 
+                             IsChecked="{Binding IsBatchMode, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}" 
+                             Style="{StaticResource ModernRadioButtonStyle}"
+                             GroupName="Mode"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- Search and Controls Bar -->
+        <Border Grid.Row="2" Background="White" Padding="15,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox Grid.Column="0" 
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                         VerticalAlignment="Center">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Escape" Command="{Binding ClearSearchCommand}"/>
+                    </TextBox.InputBindings>
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource ModernTextBoxStyle}">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Background">
+                                        <Setter.Value>
+                                            <VisualBrush AlignmentX="Left" AlignmentY="Center" Stretch="None">
+                                                <VisualBrush.Visual>
+                                                    <TextBlock Text="Search applications..." 
+                                                               Foreground="Gray" FontStyle="Italic" Margin="10,0"/>
+                                                </VisualBrush.Visual>
+                                            </VisualBrush>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0"
+                            Visibility="{Binding IsBatchMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Button Content="Select All" Width="90" Margin="0,0,5,0"
+                            Command="{Binding SelectAllCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"/>
+                    <Button Content="Deselect All" Width="90"
+                            Command="{Binding DeselectAllCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- Main Content Area -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="*" MinWidth="250"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Batch Mode Content -->
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" 
+                          Visibility="{Binding IsBatchMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                          Background="White" Padding="15">
+                <ItemsControl ItemsSource="{Binding FilteredCategories}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="4" VerticalAlignment="Top"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="10" Background="{StaticResource LightGrayBrush}" 
+                                    CornerRadius="4" Padding="10" VerticalAlignment="Top">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    
+                                    <Expander Grid.Row="0" IsExpanded="{Binding IsExpanded}" 
+                                              Style="{StaticResource CategoryExpanderStyle}"
+                                              VerticalAlignment="Top">
+                                        <Expander.Header>
+                                            <TextBlock>
+                                                <Run Text="{Binding Name}"/>
+                                                <Run Text=" ("/>
+                                                <Run Text="{Binding SelectedCount, Mode=OneWay}"/>
+                                                <Run Text="/"/>
+                                                <Run Text="{Binding Applications.Count, Mode=OneWay}"/>
+                                                <Run Text=")"/>
+                                            </TextBlock>
+                                        </Expander.Header>
+                                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                                            <ItemsControl ItemsSource="{Binding Applications}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                                  Style="{StaticResource ModernCheckBoxStyle}"
+                                                                  Margin="0,3">
+                                                            <TextBlock>
+                                                                <TextBlock.Text>
+                                                                    <MultiBinding StringFormat="{}{0} (~{1}MB)">
+                                                                        <Binding Path="Name"/>
+                                                                        <Binding Path="EstimatedSizeMB"/>
+                                                                    </MultiBinding>
+                                                                </TextBlock.Text>
+                                                            </TextBlock>
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Expander>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            
+            <!-- Single Mode Content -->
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
+                          Background="White" Padding="15">
+                <ScrollViewer.Visibility>
+                    <Binding Path="IsBatchMode" Converter="{StaticResource InverseBooleanToVisibilityConverter}"/>
+                </ScrollViewer.Visibility>
+                <StackPanel>
+                    <TextBlock Text="Application Selection" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
+                    <ComboBox ItemsSource="{Binding AllApplications}" 
+                              SelectedItem="{Binding SelectedSingleSoftware, Mode=TwoWay}"
+                              Height="35" FontSize="14" Margin="0,0,0,20">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock>
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="{}{0} - {1} (~{2}MB)">
+                                            <Binding Path="Name"/>
+                                            <Binding Path="Category"/>
+                                            <Binding Path="EstimatedSizeMB"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    
+                    <TextBlock Text="Installer Path or URL" FontWeight="Bold" FontSize="14" Margin="0,0,0,5"/>
+                    <Grid Margin="0,0,0,20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Height="35" 
+                                 Text="{Binding SingleModeInstallerPath, Mode=TwoWay}"
+                                 Style="{StaticResource ModernTextBoxStyle}"/>
+                        <Button Grid.Column="1" Content="Browse..." Width="80" Margin="5,0,0,0"
+                                Command="{Binding BrowseSingleModeInstallerCommand}"
+                                Style="{StaticResource SecondaryButtonStyle}"/>
+                    </Grid>
+                    
+                    <TextBlock Text="Command-line Arguments" FontWeight="Bold" FontSize="14" Margin="0,0,0,5"/>
+                    <TextBox Height="80" TextWrapping="Wrap" AcceptsReturn="True"
+                             Text="{Binding SingleModeInstallArguments, Mode=TwoWay}"
+                             Style="{StaticResource ModernTextBoxStyle}"
+                             Margin="0,0,0,20"/>
+                    
+                    <CheckBox Content="Auto-detect installer type and arguments" 
+                              IsChecked="{Binding AutoDetectInstallerType, Mode=TwoWay}"
+                              Style="{StaticResource ModernCheckBoxStyle}"/>
+                </StackPanel>
+            </ScrollViewer>
+            
+            <!-- Options Panel -->
+            <Border Grid.Column="1" Background="{StaticResource LightGrayBrush}" 
+                    BorderBrush="{StaticResource MediumGrayBrush}" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="15">
+                    <StackPanel>
+                        <!-- Installation Options -->
+                        <Expander Header="Installation Options" IsExpanded="True" 
+                                  Style="{StaticResource CategoryExpanderStyle}">
+                            <StackPanel Margin="0,10,0,0">
+                                <CheckBox Content="Create System Restore Point" 
+                                          IsChecked="{Binding InstallationOptions.CreateSystemRestorePoint, Mode=TwoWay}"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <CheckBox Content="Disable Desktop Shortcuts" 
+                                          IsChecked="{Binding InstallationOptions.DisableDesktopShortcuts, Mode=TwoWay}"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <CheckBox Content="Disable Start Menu Shortcuts" 
+                                          IsChecked="{Binding InstallationOptions.DisableStartMenuShortcuts, Mode=TwoWay}"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <CheckBox Content="Disable Auto-Start" 
+                                          IsChecked="{Binding InstallationOptions.DisableAutoStart, Mode=TwoWay}"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <CheckBox Content="Clean Up Downloaded Installers" 
+                                          IsChecked="{Binding InstallationOptions.CleanUpInstallers, Mode=TwoWay}"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <CheckBox Content="Run as Administrator" 
+                                          IsChecked="{Binding InstallationOptions.RunAsAdministrator, Mode=TwoWay}"
+                                          IsEnabled="False"
+                                          Style="{StaticResource ModernCheckBoxStyle}"
+                                          ToolTip="Always enabled for proper installation"/>
+                            </StackPanel>
+                        </Expander>
+                        
+                        <!-- Download Options -->
+                        <Expander Header="Download Options" IsExpanded="True" 
+                                  Style="{StaticResource CategoryExpanderStyle}"
+                                  Margin="0,10,0,0">
+                            <StackPanel Margin="0,10,0,0">
+                                <TextBlock Text="Download Location" FontSize="12" Margin="0,0,0,5"/>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" 
+                                             Text="{Binding InstallationOptions.DownloadLocation, Mode=TwoWay}"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             FontSize="12" Height="30"/>
+                                    <Button Grid.Column="1" Content="..." Width="30" Margin="5,0,0,0"
+                                            Command="{Binding BrowseDownloadLocationCommand}"
+                                            Style="{StaticResource SecondaryButtonStyle}"/>
+                                </Grid>
+                                
+                                <TextBlock Text="File Organization" FontSize="12" Margin="0,0,0,5"/>
+                                <RadioButton Content="Keep as individual files" 
+                                             IsChecked="{Binding KeepIndividualFiles, Mode=TwoWay}"
+                                             GroupName="FileOrg" Margin="0,2"/>
+                                <RadioButton Content="Compress to categorized ZIP files" 
+                                             IsChecked="{Binding CompressToCategorizedZip, Mode=TwoWay}"
+                                             GroupName="FileOrg" Margin="0,2,0,10"/>
+                                
+                                <CheckBox Content="Use System Proxy" 
+                                          IsChecked="{Binding InstallationOptions.UseSystemProxy, Mode=TwoWay}"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                
+                                <TextBlock Text="Timeout (seconds)" FontSize="12" Margin="0,10,0,5"/>
+                                <TextBox Text="{Binding InstallationOptions.TimeoutSeconds, Mode=TwoWay}"
+                                         Style="{StaticResource ModernTextBoxStyle}"
+                                         FontSize="12" Height="30"/>
+                            </StackPanel>
+                        </Expander>
+                        
+                        <!-- Selection Summary -->
+                        <Border Background="White" CornerRadius="4" Padding="10" Margin="0,15,0,0">
+                            <StackPanel>
+                                <TextBlock FontWeight="Bold" FontSize="14" Margin="0,0,0,5">Selection Summary</TextBlock>
+                                <TextBlock Text="{Binding SelectedApplicationCount, Mode=OneWay, StringFormat='{}{0} application(s) selected'}"/>
+                                <TextBlock Text="{Binding TotalSizeMB, Mode=OneWay, StringFormat='Total Size: {0} MB'}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+        
+        <!-- Action Buttons and Progress -->
+        <Border Grid.Row="4" Background="{StaticResource LightGrayBrush}" Padding="15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button Content="Download Selected" Width="180" Margin="0,0,10,0"
+                            Command="{Binding DownloadSelectedCommand}"
+                            Style="{StaticResource PrimaryButtonStyle}"/>
+                    <Button Content="Install Selected" Width="180" Margin="0,0,10,0"
+                            Command="{Binding InstallSelectedCommand}"
+                            Style="{StaticResource AccentButtonStyle}"/>
+                    <Button Content="Cancel" Width="100"
+                            Command="{Binding CancelOperationCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"/>
+                </StackPanel>
+                
+                <!-- Progress Bars -->
+                <StackPanel Grid.Column="1" Margin="20,0" VerticalAlignment="Center" MinWidth="400">
+                    <TextBlock Text="{Binding StatusText, Mode=OneWay}" FontWeight="Bold" Margin="0,0,0,5" 
+                               HorizontalAlignment="Center"/>
+                    <Grid MinHeight="50">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Grid Grid.Row="0">
+                            <ProgressBar Value="{Binding OverallProgress, Mode=OneWay}" 
+                                         Style="{StaticResource ModernProgressBarStyle}"
+                                         Height="22"/>
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Text="{Binding OverallProgress, Mode=OneWay, StringFormat='Overall Progress: {0:F0}%'}"
+                                       Foreground="White" FontWeight="SemiBold"/>
+                        </Grid>
+                        
+                        <Grid Grid.Row="2">
+                            <ProgressBar Value="{Binding CurrentOperationProgress, Mode=OneWay}" 
+                                         Style="{StaticResource ModernProgressBarStyle}"
+                                         Height="22">
+                                <ProgressBar.Foreground>
+                                    <SolidColorBrush Color="{StaticResource AccentGreen}"/>
+                                </ProgressBar.Foreground>
+                            </ProgressBar>
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Text="{Binding CurrentOperationText, Mode=OneWay}"
+                                       Foreground="White" FontWeight="SemiBold"/>
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+                
+                <!-- Export Log Button -->
+                <Button Grid.Column="2" Content="Export Log" Width="100"
+                        Command="{Binding ExportLogCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+            </Grid>
+        </Border>
+        
+        <!-- Log Output Area -->
+        <Border Grid.Row="5" BorderBrush="{StaticResource MediumGrayBrush}" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <Border Grid.Row="0" Background="{StaticResource LightGrayBrush}" Padding="10,5">
+                    <TextBlock Text="Installation Log" FontWeight="Bold"/>
+                </Border>
+                
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" 
+                              Background="White" Padding="10">
+                    <ItemsControl ItemsSource="{Binding LogEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontFamily="Consolas" FontSize="12">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Path=., Converter={StaticResource LogLevelConverter}}" 
+                                                             Value="WARNING">
+                                                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Path=., Converter={StaticResource LogLevelConverter}}" 
+                                                             Value="ERROR">
+                                                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Path=., Converter={StaticResource LogLevelConverter}}" 
+                                                             Value="DEBUG">
+                                                    <Setter Property="Foreground" Value="{StaticResource DebugBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+        
+        <!-- Status Bar -->
+        <Border Grid.Row="6" Background="{StaticResource SecondaryBlueBrush}">
+            <Grid>
+                <TextBlock Text="{Binding StatusText, Mode=OneWay}" 
+                           VerticalAlignment="Center" HorizontalAlignment="Left" 
+                           Margin="10,0" Foreground="White"/>
+                <TextBlock Text="Version 1.0.0" 
+                           VerticalAlignment="Center" HorizontalAlignment="Right" 
+                           Margin="10,0" Foreground="White"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
