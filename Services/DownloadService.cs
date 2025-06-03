@@ -69,7 +69,35 @@ namespace MoonLight.Services
                     request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingLength, null);
                 }
 
-                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                HttpResponseMessage response;
+                try
+                {
+                    response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                }
+                catch (HttpRequestException ex)
+                {
+                    _loggingService.LogError($"Network error downloading {software.Name}: {ex.Message}");
+                    progress?.Report(new DownloadProgress
+                    {
+                        Status = DownloadStatus.Failed,
+                        StatusMessage = $"Network error: {ex.Message}"
+                    });
+                    throw new Exception($"Network error: Unable to connect to download server. {ex.Message}", ex);
+                }
+                catch (TaskCanceledException ex)
+                {
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        _loggingService.LogError($"Download timeout for {software.Name}");
+                        progress?.Report(new DownloadProgress
+                        {
+                            Status = DownloadStatus.Failed,
+                            StatusMessage = "Download timeout"
+                        });
+                        throw new Exception("Download timeout: The server took too long to respond.", ex);
+                    }
+                    throw;
+                }
                 
                 if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
                 {
@@ -77,7 +105,37 @@ namespace MoonLight.Services
                     return filePath;
                 }
 
-                response.EnsureSuccessStatusCode();
+                // Handle specific HTTP status codes
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _loggingService.LogError($"Download URL not found for {software.Name}: {software.DownloadUrl}");
+                    progress?.Report(new DownloadProgress
+                    {
+                        Status = DownloadStatus.Failed,
+                        StatusMessage = "File not found (404)"
+                    });
+                    throw new Exception($"Download failed: The file was not found on the server (404). URL: {software.DownloadUrl}");
+                }
+                else if (response.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    _loggingService.LogError($"Access forbidden for {software.Name}: {software.DownloadUrl}");
+                    progress?.Report(new DownloadProgress
+                    {
+                        Status = DownloadStatus.Failed,
+                        StatusMessage = "Access forbidden (403)"
+                    });
+                    throw new Exception("Download failed: Access to the file was forbidden (403). The download link may have expired.");
+                }
+                else if (!response.IsSuccessStatusCode)
+                {
+                    _loggingService.LogError($"HTTP error {response.StatusCode} for {software.Name}");
+                    progress?.Report(new DownloadProgress
+                    {
+                        Status = DownloadStatus.Failed,
+                        StatusMessage = $"HTTP error: {response.StatusCode}"
+                    });
+                    throw new Exception($"Download failed with HTTP status: {response.StatusCode} - {response.ReasonPhrase}");
+                }
 
                 var totalBytes = response.Content.Headers.ContentLength ?? -1;
                 if (response.StatusCode == HttpStatusCode.PartialContent)
@@ -85,6 +143,7 @@ namespace MoonLight.Services
                     totalBytes += existingLength;
                 }
 
+                using (response)
                 using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken))
                 using (var fileStream = new FileStream(tempPath, existingLength > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None))
                 {
@@ -144,7 +203,35 @@ namespace MoonLight.Services
             catch (OperationCanceledException)
             {
                 _loggingService.LogWarning($"Download cancelled: {software.Name}");
+                progress?.Report(new DownloadProgress
+                {
+                    Status = DownloadStatus.Failed,
+                    StatusMessage = "Download cancelled"
+                });
+                
+                // Clean up partial download
+                try
+                {
+                    var tempPath = Path.Combine(options.DownloadLocation, GetFileNameFromUrl(software.DownloadUrl) + ".tmp");
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                        _loggingService.LogInfo($"Cleaned up partial download: {tempPath}");
+                    }
+                }
+                catch { }
+                
                 throw;
+            }
+            catch (IOException ioEx)
+            {
+                _loggingService.LogError($"IO error downloading {software.Name}: {ioEx.Message}");
+                progress?.Report(new DownloadProgress
+                {
+                    Status = DownloadStatus.Failed,
+                    StatusMessage = $"Storage error: {ioEx.Message}"
+                });
+                throw new Exception($"Storage error: {ioEx.Message}. Check available disk space and permissions.", ioEx);
             }
             catch (Exception ex)
             {

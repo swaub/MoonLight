@@ -4,7 +4,12 @@
       "Bash(mkdir:*)",
       "Bash(dotnet build)",
       "Bash(mv:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" build)",
+      "Bash(\"/mnt/c/Program Files/dotnet/dotnet.exe\" run)"
     ]
   },
   "enableAllProjectMcpServers": false

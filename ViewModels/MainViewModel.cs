@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 using System.Windows.Input;
 using MoonLight.Models;
 using MoonLight.Services;
+using MessageBox = System.Windows.MessageBox;
 
 namespace MoonLight.ViewModels
 {
@@ -187,6 +189,9 @@ namespace MoonLight.ViewModels
         public int TotalSizeMB => Categories.SelectMany(c => c.Applications).Where(a => a.IsSelected).Sum(a => a.EstimatedSizeMB);
         
         public IEnumerable<Software> AllApplications => Categories.SelectMany(c => c.Applications);
+        
+        public bool HasFailedDownloads => Categories.SelectMany(c => c.Applications)
+            .Any(a => a.StatusMessage == "Download failed" || a.StatusMessage == "Retry failed" || a.StatusMessage == "Installation failed");
 
         public ICommand SelectAllCommand { get; private set; } = null!;
         public ICommand DeselectAllCommand { get; private set; } = null!;
@@ -197,6 +202,7 @@ namespace MoonLight.ViewModels
         public ICommand BrowseDownloadLocationCommand { get; private set; } = null!;
         public ICommand ClearSearchCommand { get; private set; } = null!;
         public ICommand BrowseSingleModeInstallerCommand { get; private set; } = null!;
+        public ICommand RetryFailedCommand { get; private set; } = null!;
 
         private void InitializeCommands()
         {
@@ -209,6 +215,7 @@ namespace MoonLight.ViewModels
             BrowseDownloadLocationCommand = new RelayCommand(_ => BrowseDownloadLocation());
             ClearSearchCommand = new RelayCommand(_ => SearchText = string.Empty);
             BrowseSingleModeInstallerCommand = new RelayCommand(_ => BrowseSingleModeInstaller());
+            RetryFailedCommand = new RelayCommand(async _ => await RetryFailed(), _ => HasFailedDownloads && !IsOperationInProgress);
         }
 
         private void LoadSoftwareCatalog()
@@ -238,6 +245,10 @@ namespace MoonLight.ViewModels
                         {
                             OnPropertyChanged(nameof(SelectedApplicationCount));
                             OnPropertyChanged(nameof(TotalSizeMB));
+                        }
+                        else if (e.PropertyName == nameof(Software.StatusMessage))
+                        {
+                            OnPropertyChanged(nameof(HasFailedDownloads));
                         }
                     };
                 }
@@ -321,25 +332,80 @@ namespace MoonLight.ViewModels
             {
                 CurrentOperationText = $"Downloading {app.Name}...";
                 _loggingService.LogInfo($"Starting download: {app.Name} ({app.EstimatedSizeMB}MB)");
+                
+                // Reset and mark as processing
+                app.IsProcessing = true;
+                app.DownloadProgress = 0;
+                app.InstallProgress = 0;
+                app.StatusMessage = "Downloading...";
+
+                // Define progress handler outside try block so it can be reused in retry
+                var progress = new Progress<DownloadProgress>(p =>
+                {
+                    CurrentOperationProgress = p.ProgressPercentage;
+                    app.DownloadProgress = p.ProgressPercentage;
+                    
+                    if (p.DownloadSpeedMBps > 0)
+                    {
+                        CurrentOperationText = $"Downloading {app.Name} - {p.ProgressPercentage:F1}% ({p.DownloadSpeedMBps:F1} MB/s)";
+                        app.StatusMessage = $"{p.ProgressPercentage:F0}% @ {p.DownloadSpeedMBps:F1} MB/s";
+                    }
+                    else
+                    {
+                        app.StatusMessage = $"{p.ProgressPercentage:F0}%";
+                    }
+                });
 
                 try
                 {
-                    var progress = new Progress<DownloadProgress>(p =>
-                    {
-                        CurrentOperationProgress = p.ProgressPercentage;
-                        if (p.DownloadSpeedMBps > 0)
-                        {
-                            CurrentOperationText = $"Downloading {app.Name} - {p.ProgressPercentage:F1}% ({p.DownloadSpeedMBps:F1} MB/s)";
-                        }
-                    });
-
                     await _downloadService.DownloadFileAsync(app, InstallationOptions, progress);
                     _loggingService.LogInfo($"Successfully downloaded: {app.Name}");
+                    app.DownloadProgress = 100;
+                    app.StatusMessage = "Download complete";
                     completed++;
                 }
                 catch (Exception ex)
                 {
                     _loggingService.LogError($"Failed to download {app.Name}: {ex.Message}");
+                    app.StatusMessage = "Download failed";
+                    
+                    // Show error dialog with retry option
+                    var result = MessageBox.Show(
+                        $"Failed to download {app.Name}:\n\n{ex.Message}\n\nWould you like to retry?",
+                        "Download Error",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Error);
+                    
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        // Retry download
+                        app.DownloadProgress = 0;
+                        app.StatusMessage = "Retrying...";
+                        
+                        try
+                        {
+                            await _downloadService.DownloadFileAsync(app, InstallationOptions, progress);
+                            _loggingService.LogInfo($"Successfully downloaded on retry: {app.Name}");
+                            app.DownloadProgress = 100;
+                            app.StatusMessage = "Download complete";
+                            completed++;
+                        }
+                        catch (Exception retryEx)
+                        {
+                            _loggingService.LogError($"Retry failed for {app.Name}: {retryEx.Message}");
+                            app.StatusMessage = "Retry failed";
+                            
+                            MessageBox.Show(
+                                $"Retry failed for {app.Name}:\n\n{retryEx.Message}",
+                                "Download Error",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error);
+                        }
+                    }
+                }
+                finally
+                {
+                    app.IsProcessing = false;
                 }
 
                 OverallProgress = (completed * 100.0) / selectedApps.Count;
@@ -381,16 +447,28 @@ namespace MoonLight.ViewModels
             {
                 CurrentOperationText = $"Installing {app.Name}...";
                 _loggingService.LogInfo($"Starting installation: {app.Name}");
+                
+                // Mark as processing for installation
+                app.IsProcessing = true;
+                app.InstallProgress = 0;
+                app.StatusMessage = "Installing...";
 
                 try
                 {
                     await _installationService.InstallApplicationAsync(app, InstallationOptions);
                     _loggingService.LogInfo($"Successfully installed: {app.Name}");
+                    app.InstallProgress = 100;
+                    app.StatusMessage = "Installation complete";
                     completed++;
                 }
                 catch (Exception ex)
                 {
                     _loggingService.LogError($"Failed to install {app.Name}: {ex.Message}");
+                    app.StatusMessage = "Installation failed";
+                }
+                finally
+                {
+                    app.IsProcessing = false;
                 }
 
                 OverallProgress = (completed * 100.0) / selectedApps.Count;
@@ -425,6 +503,82 @@ namespace MoonLight.ViewModels
                 File.WriteAllLines(dialog.FileName, LogEntries);
                 _loggingService.LogInfo($"Log exported to: {dialog.FileName}");
             }
+        }
+        
+        private async Task RetryFailed()
+        {
+            IsOperationInProgress = true;
+            StatusText = "Retrying failed downloads...";
+            _loggingService.LogInfo("Retrying failed downloads");
+            
+            var failedApps = Categories.SelectMany(c => c.Applications)
+                .Where(a => a.StatusMessage == "Download failed" || a.StatusMessage == "Retry failed" || a.StatusMessage == "Installation failed")
+                .ToList();
+                
+            if (!failedApps.Any())
+            {
+                StatusText = "No failed downloads to retry";
+                IsOperationInProgress = false;
+                return;
+            }
+            
+            OverallProgress = 0;
+            int completed = 0;
+            
+            foreach (var app in failedApps)
+            {
+                CurrentOperationText = $"Retrying {app.Name}...";
+                _loggingService.LogInfo($"Retrying download: {app.Name}");
+                
+                // Reset status
+                app.IsProcessing = true;
+                app.DownloadProgress = 0;
+                app.StatusMessage = "Retrying...";
+                
+                try
+                {
+                    var progress = new Progress<DownloadProgress>(p =>
+                    {
+                        CurrentOperationProgress = p.ProgressPercentage;
+                        app.DownloadProgress = p.ProgressPercentage;
+                        
+                        if (p.DownloadSpeedMBps > 0)
+                        {
+                            CurrentOperationText = $"Downloading {app.Name} - {p.ProgressPercentage:F1}% ({p.DownloadSpeedMBps:F1} MB/s)";
+                            app.StatusMessage = $"{p.ProgressPercentage:F0}% @ {p.DownloadSpeedMBps:F1} MB/s";
+                        }
+                        else
+                        {
+                            app.StatusMessage = $"{p.ProgressPercentage:F0}%";
+                        }
+                    });
+                    
+                    await _downloadService.DownloadFileAsync(app, InstallationOptions, progress);
+                    _loggingService.LogInfo($"Successfully downloaded on retry: {app.Name}");
+                    app.DownloadProgress = 100;
+                    app.StatusMessage = "Download complete";
+                    completed++;
+                }
+                catch (Exception ex)
+                {
+                    _loggingService.LogError($"Retry failed for {app.Name}: {ex.Message}");
+                    app.StatusMessage = "Retry failed";
+                }
+                finally
+                {
+                    app.IsProcessing = false;
+                }
+                
+                OverallProgress = (completed * 100.0) / failedApps.Count;
+            }
+            
+            StatusText = $"Retry complete: {completed} of {failedApps.Count} succeeded";
+            IsOperationInProgress = false;
+            CurrentOperationText = string.Empty;
+            CurrentOperationProgress = 0;
+            
+            // Update HasFailedDownloads binding
+            OnPropertyChanged(nameof(HasFailedDownloads));
         }
 
         private void BrowseDownloadLocation()

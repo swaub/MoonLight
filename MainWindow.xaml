@@ -19,6 +19,7 @@
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
         <converters:LogLevelConverter x:Key="LogLevelConverter"/>
+        <converters:MaxValueConverter x:Key="MaxValueConverter"/>
     </Window.Resources>
     
     <Grid>
@@ -154,18 +155,109 @@
                                             <ItemsControl ItemsSource="{Binding Applications}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" 
-                                                                  Style="{StaticResource ModernCheckBoxStyle}"
-                                                                  Margin="0,3">
-                                                            <TextBlock>
-                                                                <TextBlock.Text>
-                                                                    <MultiBinding StringFormat="{}{0} (~{1}MB)">
-                                                                        <Binding Path="Name"/>
-                                                                        <Binding Path="EstimatedSizeMB"/>
-                                                                    </MultiBinding>
-                                                                </TextBlock.Text>
-                                                            </TextBlock>
-                                                        </CheckBox>
+                                                        <Border Padding="5,3" CornerRadius="3" Margin="0,2">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="Transparent"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsProcessing}" Value="True">
+                                                                            <Setter Property="Background" Value="#E3F2FD"/>
+                                                                        </DataTrigger>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding IsProcessing}" Value="False"/>
+                                                                                <Condition Binding="{Binding StatusMessage}" Value="Download failed"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter Property="Background" Value="#FFEBEE"/>
+                                                                            <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
+                                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                                        </MultiDataTrigger>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding IsProcessing}" Value="False"/>
+                                                                                <Condition Binding="{Binding StatusMessage}" Value="Installation failed"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter Property="Background" Value="#FFEBEE"/>
+                                                                            <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
+                                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                                        </MultiDataTrigger>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding IsProcessing}" Value="False"/>
+                                                                                <Condition Binding="{Binding StatusMessage}" Value="Retry failed"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter Property="Background" Value="#FFEBEE"/>
+                                                                            <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
+                                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                                        </MultiDataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <Grid>
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+                                                                
+                                                                <CheckBox Grid.Row="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                                          Style="{StaticResource ModernCheckBoxStyle}"
+                                                                          Margin="0">
+                                                                    <TextBlock>
+                                                                        <TextBlock.Text>
+                                                                            <MultiBinding StringFormat="{}{0} (~{1}MB)">
+                                                                                <Binding Path="Name"/>
+                                                                                <Binding Path="EstimatedSizeMB"/>
+                                                                            </MultiBinding>
+                                                                        </TextBlock.Text>
+                                                                    </TextBlock>
+                                                                </CheckBox>
+                                                                
+                                                                <!-- Progress Bar for Individual Items -->
+                                                                <Grid Grid.Row="1" Margin="20,2,5,2">
+                                                                    <Grid.Visibility>
+                                                                        <Binding Path="IsProcessing" Converter="{StaticResource BooleanToVisibilityConverter}"/>
+                                                                    </Grid.Visibility>
+                                                                    <ProgressBar Height="6">
+                                                                        <ProgressBar.Value>
+                                                                            <MultiBinding>
+                                                                                <MultiBinding.Converter>
+                                                                                    <converters:MaxValueConverter/>
+                                                                                </MultiBinding.Converter>
+                                                                                <Binding Path="DownloadProgress"/>
+                                                                                <Binding Path="InstallProgress"/>
+                                                                            </MultiBinding>
+                                                                        </ProgressBar.Value>
+                                                                        <ProgressBar.Style>
+                                                                            <Style TargetType="ProgressBar">
+                                                                                <Setter Property="Background" Value="#E0E0E0"/>
+                                                                                <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+                                                                                <Setter Property="BorderThickness" Value="0"/>
+                                                                                <Setter Property="Template">
+                                                                                    <Setter.Value>
+                                                                                        <ControlTemplate TargetType="ProgressBar">
+                                                                                            <Grid>
+                                                                                                <Border Background="{TemplateBinding Background}" CornerRadius="3"/>
+                                                                                                <Border x:Name="PART_Track" CornerRadius="3"/>
+                                                                                                <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="3">
+                                                                                                    <Border.Background>
+                                                                                                        <SolidColorBrush Color="{StaticResource AccentGreen}"/>
+                                                                                                    </Border.Background>
+                                                                                                </Border>
+                                                                                            </Grid>
+                                                                                        </ControlTemplate>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </Style>
+                                                                        </ProgressBar.Style>
+                                                                    </ProgressBar>
+                                                                    <TextBlock Text="{Binding StatusMessage}" 
+                                                                               FontSize="10" 
+                                                                               Foreground="{StaticResource MediumGrayBrush}" 
+                                                                               HorizontalAlignment="Center" 
+                                                                               VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                            </Grid>
+                                                        </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
@@ -267,19 +359,22 @@
                                   Style="{StaticResource CategoryExpanderStyle}"
                                   Margin="0,10,0,0">
                             <StackPanel Margin="0,10,0,0">
-                                <TextBlock Text="Download Location" FontSize="12" Margin="0,0,0,5"/>
+                                <TextBlock Text="Download Location" FontSize="12" Margin="0,0,0,5" Foreground="{StaticResource TextBrush}"/>
                                 <Grid Margin="0,0,0,10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox Grid.Column="0" 
-                                             Text="{Binding InstallationOptions.DownloadLocation, Mode=TwoWay}"
+                                             Text="{Binding InstallationOptions.DownloadLocation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource ModernTextBoxStyle}"
-                                             FontSize="12" Height="30"/>
-                                    <Button Grid.Column="1" Content="..." Width="30" Margin="5,0,0,0"
+                                             FontSize="12" Height="30"
+                                             IsReadOnly="False"
+                                             VerticalContentAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="..." Width="30" Height="30" Margin="5,0,0,0"
                                             Command="{Binding BrowseDownloadLocationCommand}"
-                                            Style="{StaticResource SecondaryButtonStyle}"/>
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            VerticalAlignment="Center"/>
                                 </Grid>
                                 
                                 <TextBlock Text="File Organization" FontSize="12" Margin="0,0,0,5"/>
@@ -315,7 +410,7 @@
         </Grid>
         
         <!-- Action Buttons and Progress -->
-        <Border Grid.Row="4" Background="{StaticResource LightGrayBrush}" Padding="15">
+        <Border Grid.Row="4" Background="{StaticResource SecondaryBlueBrush}" Padding="15">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -331,45 +426,73 @@
                     <Button Content="Install Selected" Width="180" Margin="0,0,10,0"
                             Command="{Binding InstallSelectedCommand}"
                             Style="{StaticResource AccentButtonStyle}"/>
-                    <Button Content="Cancel" Width="100"
+                    <Button Content="Cancel" Width="100" Margin="0,0,10,0"
                             Command="{Binding CancelOperationCommand}"
                             Style="{StaticResource SecondaryButtonStyle}"/>
+                    <Button Content="Retry Failed" Width="120"
+                            Command="{Binding RetryFailedCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Visibility="{Binding HasFailedDownloads, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </StackPanel>
                 
                 <!-- Progress Bars -->
-                <StackPanel Grid.Column="1" Margin="20,0" VerticalAlignment="Center" MinWidth="400">
-                    <TextBlock Text="{Binding StatusText, Mode=OneWay}" FontWeight="Bold" Margin="0,0,0,5" 
-                               HorizontalAlignment="Center"/>
-                    <Grid MinHeight="50">
+                <Border Grid.Column="1" Background="White" CornerRadius="6" Padding="15,10" Margin="20,0" MinWidth="500">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.3" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding StatusText, Mode=OneWay}" FontWeight="Bold" FontSize="16" Margin="0,0,0,8" 
+                                   HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                        <Grid MinHeight="60">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="5"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <Grid Grid.Row="0">
-                            <ProgressBar Value="{Binding OverallProgress, Mode=OneWay}" 
-                                         Style="{StaticResource ModernProgressBarStyle}"
-                                         Height="22"/>
-                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Text="{Binding OverallProgress, Mode=OneWay, StringFormat='Overall Progress: {0:F0}%'}"
-                                       Foreground="White" FontWeight="SemiBold"/>
-                        </Grid>
+                            <Grid Grid.Row="0">
+                                <ProgressBar Value="{Binding OverallProgress, Mode=OneWay}" 
+                                             Height="28">
+                                    <ProgressBar.Style>
+                                        <Style TargetType="ProgressBar" BasedOn="{StaticResource ModernProgressBarStyle}">
+                                            <Setter Property="Background" Value="#E0E0E0"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBlueBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                        </Style>
+                                    </ProgressBar.Style>
+                                </ProgressBar>
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Text="{Binding OverallProgress, Mode=OneWay, StringFormat='Overall Progress: {0:F0}%'}"
+                                           Foreground="White" FontWeight="Bold" FontSize="14">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect BlurRadius="2" ShadowDepth="1" Opacity="0.5" Color="Black"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                            </Grid>
                         
-                        <Grid Grid.Row="2">
-                            <ProgressBar Value="{Binding CurrentOperationProgress, Mode=OneWay}" 
-                                         Style="{StaticResource ModernProgressBarStyle}"
-                                         Height="22">
-                                <ProgressBar.Foreground>
-                                    <SolidColorBrush Color="{StaticResource AccentGreen}"/>
-                                </ProgressBar.Foreground>
-                            </ProgressBar>
-                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Text="{Binding CurrentOperationText, Mode=OneWay}"
-                                       Foreground="White" FontWeight="SemiBold"/>
+                            <Grid Grid.Row="2">
+                                <ProgressBar Value="{Binding CurrentOperationProgress, Mode=OneWay}" 
+                                             Height="24">
+                                    <ProgressBar.Style>
+                                        <Style TargetType="ProgressBar" BasedOn="{StaticResource ModernProgressBarStyle}">
+                                            <Setter Property="Background" Value="#E8F5E9"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+                                        </Style>
+                                    </ProgressBar.Style>
+                                </ProgressBar>
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Text="{Binding CurrentOperationText, Mode=OneWay}"
+                                           Foreground="White" FontWeight="Bold" FontSize="12">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect BlurRadius="2" ShadowDepth="1" Opacity="0.5" Color="Black"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                            </Grid>
                         </Grid>
-                    </Grid>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
                 
                 <!-- Export Log Button -->
                 <Button Grid.Column="2" Content="Export Log" Width="100"
